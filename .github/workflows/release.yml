@@ -1,5 +1,7 @@
 name: Build and Release
 
+# Pushing a v* tag builds macOS/Windows packages and publishes a GitHub release.
+
 on:
   push:
     tags: ['v*']
