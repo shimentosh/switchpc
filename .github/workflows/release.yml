@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: macos-14  # systray needs a desktop toolkit that Ubuntu runners lack
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

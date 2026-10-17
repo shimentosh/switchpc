@@ -4,7 +4,7 @@ Unicode true
 !include LogicLib.nsh
 
 !define APP_NAME "VKVM"
-!define APP_VERSION "0.2.0"
+!define APP_VERSION "0.2.1"
 
 Name "${APP_NAME}"
 OutFile "..\\..\\VKVM-Setup.exe"

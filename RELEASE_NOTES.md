@@ -1,3 +1,10 @@
+# VKVM 0.2.1
+
+## Fixes
+
+- The `ddc` package now builds on platforms without a DDC backend.
+- Release builds publish automatically when a `v*` tag is pushed.
+
 # VKVM 0.2.0
 
 ## Highlights
