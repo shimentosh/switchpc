@@ -374,6 +374,10 @@ function hotkeyList(s) {
 }
 const keys = hk => hk ? hk.split('+').map(k => `<kbd>${esc(k)}</kbd>`).join(' + ') : '<span class="muted">None</span>';
 
+// Choices on the last step survive the periodic refresh while the second
+// computer is still connecting.
+const finishPrefs = { boot: true, share: false };
+
 function stepFinish(el, go) {
   const s = state;
   const agent = s.role === 'agent';
@@ -389,13 +393,15 @@ function stepFinish(el, go) {
     ${permissionsCard(s)}
     <div class="card">
       <div class="setting"><div class="grow"><b>Start VKVM when I log in</b><span class="muted small">Recommended, so switching always works.</span></div>
-        <label class="toggle"><input type="checkbox" id="boot" checked><span></span></label></div>
+        <label class="toggle"><input type="checkbox" id="boot" ${finishPrefs.boot ? 'checked' : ''}><span></span></label></div>
       ${!agent && s.peer_profile ? `<div class="setting"><div class="grow"><b>Share keyboard and mouse</b>
         <span class="muted small">Control ${esc(s.peer_profile)} with this computer's keyboard and mouse while the monitors show it. Optional; you can turn it on later in Settings.</span></div>
-        <label class="toggle"><input type="checkbox" id="share"><span></span></label></div>` : ''}
+        <label class="toggle"><input type="checkbox" id="share" ${finishPrefs.share ? 'checked' : ''}><span></span></label></div>` : ''}
     </div>
     <div class="row end"><button class="btn primary" id="done">Finish</button></div>`;
   bindPermissions(el);
+  $('#boot').onchange = e => { finishPrefs.boot = e.target.checked; };
+  if ($('#share')) $('#share').onchange = e => { finishPrefs.share = e.target.checked; };
   if (agent && !conn.connected) setTimeout(() => { if (el.isConnected) refresh(); }, 3000);
   $('#done').onclick = async () => {
     try {
