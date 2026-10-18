@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
+	"sync"
 	"time"
 
 	"vkvm/internal/autostart"
@@ -29,10 +30,26 @@ import (
 // Server provides a web-based configuration UI
 type Server struct {
 	configMgr       *config.Manager
+	switcherMu      sync.RWMutex
 	switcher        *switcher.Switcher
 	listener        net.Listener
 	onConfigSaved   func(*config.Config) error
 	onSwitchProfile func(string) error
+	app             *appState // set for the long-running app window server
+}
+
+// sw returns the switcher, which the app server receives after it starts.
+func (s *Server) sw() *switcher.Switcher {
+	s.switcherMu.RLock()
+	defer s.switcherMu.RUnlock()
+	return s.switcher
+}
+
+// SetSwitcher attaches (or replaces) the switcher used by the handlers.
+func (s *Server) SetSwitcher(sw *switcher.Switcher) {
+	s.switcherMu.Lock()
+	s.switcher = sw
+	s.switcherMu.Unlock()
 }
 
 // NewServer creates a new UI server
@@ -119,7 +136,11 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMonitors(w http.ResponseWriter, r *http.Request) {
-	monitors, err := s.switcher.ListMonitors()
+	var monitors []ddc.Monitor
+	var err error
+	if sw := s.sw(); sw != nil {
+		monitors, err = sw.ListMonitors()
+	}
 	if err != nil {
 		// Return empty array instead of error for better UI handling
 		monitors = []ddc.Monitor{}
@@ -208,11 +229,11 @@ func (s *Server) handleSwitch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		if s.switcher == nil {
+		if s.sw() == nil {
 			http.Error(w, "switcher unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		if err := s.switcher.SwitchToProfile(profileName); err != nil {
+		if err := s.sw().SwitchToProfile(profileName); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -220,8 +241,8 @@ func (s *Server) handleSwitch(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	currentProfile := profileName
-	if s.switcher != nil && s.onSwitchProfile == nil {
-		currentProfile = s.switcher.GetCurrentProfile()
+	if s.sw() != nil && s.onSwitchProfile == nil {
+		currentProfile = s.sw().GetCurrentProfile()
 	}
 	json.NewEncoder(w).Encode(map[string]string{
 		"status":  "ok",
@@ -243,7 +264,12 @@ func (s *Server) handleTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.switcher.TestMonitor(monitorID, ddc.InputSource(input)); err != nil {
+	sw := s.sw()
+	if sw == nil {
+		http.Error(w, "monitor control is unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := sw.TestMonitor(monitorID, ddc.InputSource(input)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -416,17 +442,17 @@ func (s *Server) handleSyncTo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleConnectionStatus(w http.ResponseWriter, r *http.Request) {
-	if s.switcher == nil {
+	if s.sw() == nil {
 		http.Error(w, "switcher unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	connected := s.switcher.IsConnectedToCheck()
-	state := s.switcher.AgentTransportState()
+	connected := s.sw().IsConnectedToCheck()
+	state := s.sw().AgentTransportState()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"connected": connected,
 		"state":     state,
-		"error":     s.switcher.AgentTransportError(),
+		"error":     s.sw().AgentTransportError(),
 	})
 }
 

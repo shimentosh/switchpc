@@ -106,6 +106,17 @@ type GeneralConfig struct {
 	IdentityPublicKey  string `json:"identity_public_key,omitempty"`
 	IdentityPrivateKey string `json:"identity_private_key,omitempty"`
 
+	// SetupComplete is set once the first-run setup in the app window has
+	// finished. Until then the window opens automatically on launch.
+	SetupComplete bool `json:"setup_complete"`
+
+	// DisplayName is this computer's friendly name; it doubles as the name of
+	// the profile that switches the monitors to this computer.
+	DisplayName string `json:"display_name,omitempty"`
+
+	// PeerProfile is the profile name of the paired other computer.
+	PeerProfile string `json:"peer_profile,omitempty"`
+
 	// StartOnBoot determines if app starts on system boot
 	StartOnBoot bool `json:"start_on_boot"`
 
@@ -437,6 +448,15 @@ func (m *Manager) Load() error {
 		}
 	}
 	return nil
+}
+
+// NewAPIToken returns a random high-entropy token for the authenticated API.
+func NewAPIToken() string {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(buf)
 }
 
 func newDeviceID() string {

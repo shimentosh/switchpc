@@ -17,6 +17,7 @@ import (
 	"vkvm/internal/config"
 	"vkvm/internal/input"
 	"vkvm/internal/network"
+	"vkvm/internal/pairing"
 	"vkvm/internal/protocol"
 	"vkvm/internal/security"
 	"vkvm/internal/service"
@@ -41,6 +42,7 @@ type Server struct {
 	serviceStatusProvider  func() service.DiagnosticStatus
 	inputStateProvider     func() input.StateSnapshot
 	udpTransportSelector   func(deviceID string) bool
+	pairing                *pairing.Manager
 }
 
 // NewServer creates a new API server
@@ -186,6 +188,7 @@ func (s *Server) Start(port int) error {
 	mux.HandleFunc("/api/discover", s.handleDiscover)
 	mux.HandleFunc("/api/config", s.handleConfig)
 	mux.HandleFunc("/api/pairing", s.handlePairing)
+	mux.HandleFunc("/api/pair/claim", s.handlePairClaim)
 	mux.HandleFunc("/api/detect", s.handleDetect)
 	mux.HandleFunc("/ws", wsMgr.handleWebSocket)
 	mux.HandleFunc("/health", s.handleHealth)
@@ -372,8 +375,9 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 		// Log every request for debugging
 		log.Printf("API: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
 
-		// Skip auth for health check
-		if r.URL.Path == "/health" {
+		// Skip bearer auth for the health check and for the pairing claim,
+		// which is authenticated by the short-lived pairing code instead.
+		if r.URL.Path == "/health" || r.URL.Path == "/api/pair/claim" {
 			next.ServeHTTP(w, r)
 			return
 		}

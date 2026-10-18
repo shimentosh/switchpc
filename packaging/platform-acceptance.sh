@@ -27,16 +27,12 @@ case "$(go env GOOS)" in
       echo "LaunchAgent plist not installed: $plist" >&2
       exit 1
     fi
-    if ! grep -q '<string>--companion</string>' "$plist"; then
-      echo "LaunchAgent plist does not launch --companion" >&2
-      exit 1
-    fi
     command -v launchctl >/dev/null 2>&1
     launchctl print "gui/$(id -u)/com.vkvm.agent" >/dev/null
     ;;
   windows)
     command -v powershell.exe >/dev/null 2>&1
-    powershell.exe -NoProfile -NonInteractive -Command "\$s=Get-Service -Name VKVMCore -ErrorAction Stop; if (\$s.Status -ne 'Running') { exit 1 }"
+    powershell.exe -NoProfile -NonInteractive -Command "if (-not (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name VKVM -ErrorAction SilentlyContinue)) { exit 1 }; if (-not (Get-Process vkvm -ErrorAction SilentlyContinue)) { exit 1 }"
     ;;
   *)
     echo "real platform acceptance is only defined for Windows/macOS" >&2

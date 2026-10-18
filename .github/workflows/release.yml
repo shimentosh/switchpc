@@ -104,15 +104,19 @@ jobs:
           go-version: '1.25.x'
 
       - name: Build Windows (amd64)
+        env:
+          # Optional code signing: add these repository secrets to sign.
+          WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
           choco install nsis -y --no-progress
-          New-Item -ItemType Directory -Force dist | Out-Null
-          # ControlMyMonitor.exe is gitignored inside the embed directory, so
-          # copy it in before building or the release has no DDC backend.
-          Copy-Item tools\ControlMyMonitor.exe internal\embedded\tools\ControlMyMonitor.exe -Force
-          go build -trimpath -ldflags "-H windowsgui" -o dist\vkvm.exe ./cmd
-          powershell -ExecutionPolicy Bypass -File packaging\windows\test-installer.ps1
-          & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" packaging\windows\vkvm.nsi
+          if ($env:WINDOWS_CERT_PFX_BASE64) {
+            $pfx = Join-Path $env:RUNNER_TEMP "cert.pfx"
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
+            $env:WINDOWS_CERT_PFX = $pfx
+          }
+          powershell -ExecutionPolicy Bypass -File packaging/windows/build.ps1
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

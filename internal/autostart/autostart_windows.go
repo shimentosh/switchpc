@@ -23,7 +23,7 @@ func enablePlatform() error {
 		return fmt.Errorf("open Windows Run key: %w", err)
 	}
 	defer key.Close()
-	value := `"` + strings.ReplaceAll(execPath, `"`, `\"`) + `" --companion`
+	value := `"` + strings.ReplaceAll(execPath, `"`, `\"`) + `"`
 	if err := key.SetStringValue(runValueName, value); err != nil {
 		return fmt.Errorf("set Windows auto-start value: %w", err)
 	}

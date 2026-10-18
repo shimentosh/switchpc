@@ -1,0 +1,56 @@
+name: CI
+
+# Builds and tests every branch push and pull request on both platforms.
+# Releases are made by release.yml when a v* tag is pushed.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+      - name: Check formatting
+        run: test -z "$(gofmt -l $(find . -name '*.go' -not -path './vendor/*'))"
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: Build app bundle and DMG
+        run: |
+          packaging/macos/build-dmg.sh "$RUNNER_TEMP/dmg"
+          test -f "$RUNNER_TEMP/dmg/stage/VKVM.app/Contents/Resources/AppIcon.icns"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VKVM-macos-dmg
+          path: ${{ runner.temp }}/dmg/VKVM.dmg
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+      - name: Vet
+        run: go vet ./cmd/... ./internal/ui/... ./internal/window/... ./internal/pairing/... ./internal/api/...
+      - name: Build exe and installer
+        run: |
+          choco install nsis -y --no-progress
+          powershell -ExecutionPolicy Bypass -File packaging/windows/build.ps1
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VKVM-windows-setup
+          path: |
+            VKVM-Setup.exe
+            dist/vkvm.exe

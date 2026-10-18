@@ -177,23 +177,15 @@ func (c *windowsController) ListMonitors() ([]Monitor, error) {
 		go func(idx int) {
 			defer wg.Done()
 
-			// Check heuristic for missing metadata (Monitor 3 case)
-			if monitors[idx].Name == "" && monitors[idx].Serial == "" {
-				// We still try to fetch details, but we keep this flag in mind
-			}
-
 			supported, input, err := c.fetchMonitorDetails(monitors[idx].ID)
 
 			monitorsMutex.Lock()
 			monitors[idx].DDCSupported = supported
 			if err == nil {
+				// Report the input exactly as the monitor does. An earlier
+				// heuristic rewrote HDMI1 to DP1 for monitors without a name,
+				// which picked the wrong input on monitors that really are on HDMI1.
 				monitors[idx].InputSource = input
-
-				// Heuristic logic for the DP monitor showing as HDMI1
-				if monitors[idx].Name == "" && monitors[idx].Serial == "" && monitors[idx].InputSource == InputSourceHDMI1 {
-					log.Printf("DDC: Monitor %s has missing metadata and reports HDMI1. Applying heuristic -> DP1", monitors[idx].ID)
-					monitors[idx].InputSource = InputSourceDP1
-				}
 
 				if !monitors[idx].DDCSupported {
 					monitors[idx].DDCSupported = true

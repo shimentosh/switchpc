@@ -26,7 +26,10 @@ const macLaunchAgentPlist = `<?xml version="1.0" encoding="UTF-8"?>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <true/>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
     <key>ThrottleInterval</key>
     <integer>10</integer>
     <key>ProcessType</key>
@@ -38,6 +41,9 @@ const macLaunchAgentPlist = `<?xml version="1.0" encoding="UTF-8"?>
 </dict>
 </plist>`
 
+// KeepAlive relaunches VKVM only after a crash: Quit and the self-restart
+// exit cleanly and must not be undone (or doubled) by launchd.
+//
 // renderLaunchAgentPlist renders the LaunchAgent document without escaping the
 // XML markup itself. html/template is intentionally not used here: it would
 // turn the plist's opening tags into entities such as "&lt;", which launchd

@@ -17,8 +17,12 @@ if [ -z "${GOCACHE:-}" ]; then
   GOCACHE="${TMPDIR:-/tmp}/vkvm-go-build-cache"
   export GOCACHE
 fi
-mkdir -p "$OUT/stage/VKVM.app/Contents/MacOS"
-go build -trimpath -o "$OUT/stage/VKVM.app/Contents/MacOS/vkvm" "$ROOT/cmd"
+rm -rf "$OUT/stage"
+mkdir -p "$OUT/stage/VKVM.app/Contents/MacOS" "$OUT/stage/VKVM.app/Contents/Resources"
+CGO_ENABLED=1 go build -trimpath -o "$OUT/stage/VKVM.app/Contents/MacOS/vkvm" "$ROOT/cmd"
+# App icon, drawn by internal/brand.
+go run ./packaging/icon "$OUT/icon"
+iconutil -c icns "$OUT/icon/AppIcon.iconset" -o "$OUT/stage/VKVM.app/Contents/Resources/AppIcon.icns"
 cat > "$OUT/stage/VKVM.app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -26,6 +30,10 @@ cat > "$OUT/stage/VKVM.app/Contents/Info.plist" <<PLIST
 <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
 <key>CFBundleIdentifier</key><string>com.vkvm.app</string>
 <key>CFBundleName</key><string>VKVM</string>
+<key>CFBundleDisplayName</key><string>VKVM</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
+<key>LSMinimumSystemVersion</key><string>11.0</string>
+<key>NSHumanReadableCopyright</key><string>MIT License</string>
 <key>CFBundleExecutable</key><string>vkvm</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>$VERSION</string>
@@ -35,18 +43,24 @@ cat > "$OUT/stage/VKVM.app/Contents/Info.plist" <<PLIST
 </dict></plist>
 PLIST
 if [ -n "${CODESIGN_IDENTITY:-}" ]; then
-  codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$OUT/stage/VKVM.app"
+  # Developer ID signing (set CODESIGN_IDENTITY, e.g. "Developer ID
+  # Application: Name (TEAMID)") keeps macOS permissions across updates.
+  codesign --force --options runtime --timestamp --identifier com.vkvm.app --sign "$CODESIGN_IDENTITY" "$OUT/stage/VKVM.app"
 else
   # Keep local .app bundles structurally signed. Gatekeeper still requires a
   # Developer ID signature for distribution, but an unsigned bundle is
   # rejected by LaunchServices before the user can grant TCC permissions.
-  codesign --force --deep --sign - "$OUT/stage/VKVM.app"
+  # Ad-hoc signatures change with every build, so macOS asks for the
+  # Accessibility permission again after each update.
+  codesign --force --deep --identifier com.vkvm.app --sign - "$OUT/stage/VKVM.app"
 fi
 if [ "$PORTABLE" -eq 1 ]; then
   tar -czf "$OUT/VKVM.app.tar.gz" -C "$OUT/stage" VKVM.app
   echo "created $OUT/VKVM.app.tar.gz"
   exit 0
 fi
+# Drag-to-install layout: VKVM.app next to a link to /Applications.
+ln -sf /Applications "$OUT/stage/Applications"
 hdiutil create -volname VKVM -srcfolder "$OUT/stage" -ov -format UDZO "$OUT/VKVM.dmg"
 if [ -n "${NOTARY_PROFILE:-}" ]; then
   xcrun notarytool submit "$OUT/VKVM.dmg" --keychain-profile "$NOTARY_PROFILE" --wait

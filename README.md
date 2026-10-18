@@ -1,235 +1,157 @@
-# VKVM - Virtual KVM Switcher
+# VKVM: a software KVM switch for two computers
 
-[📖 繁體中文版文檔 / Chinese Documentation](./README_zh-TW.md)
+[📖 繁體中文版文檔 / Chinese Documentation](./README_zh-TW.md) (describes the older 0.2 setup)
 
-A cross-platform DDC/CI-based monitor input switcher that works like a software KVM switch.
+VKVM switches your monitors between two computers (for example a Windows PC and a Mac)
+with a hotkey or a click, like a KVM switch without the box. It talks to the monitor over
+**DDC/CI**, the same channel the monitor's own buttons use to change input.
 
-## Motivation
+Optionally, the main computer's keyboard and mouse can control the second computer while
+the monitors show it. This is off by default.
 
-Hardware KVM switches that support 2+ monitors and 2+ computers are prohibitively expensive. VKVM provides a free, software-based alternative that leverages DDC/CI to control monitor inputs directly, eliminating the need for costly multi-monitor KVM hardware.
+Forked from [aluo96078/vkvm](https://github.com/aluo96078/vkvm) (MIT).
 
-## Tested Environment
+## What you need
 
-| Component | Specification |
-|-----------|---------------|
-| **macOS** | M4 Pro MacBook Pro (1× Native HDMI + 1× USB-C Hub) |
-| **Windows** | PC with RTX 3090 GPU |
-| **Monitors** | ASUS VG27AQL3A-W × 2 |
+- **Each computer connected to the monitor with its own cable**, each to a **different input**.
+  Example: Windows PC → HDMI 1, Mac → HDMI 2. VKVM doesn't carry video; it only tells the
+  monitor which input to show.
+- **DDC/CI turned on** in the monitor's on-screen menu (usually under *System* or *Setup*).
+- Both computers on the **same network** (same Wi-Fi or router).
+- Windows 10/11 (64-bit) and/or macOS 11+ on Apple Silicon.
 
-> ⚠️ **Important**: DDC/CI must be enabled in your monitor's OSD settings for VKVM to work.
+> Many USB-C/Thunderbolt adapters and docks block DDC/CI. If a computer can't control the
+> monitor, a direct HDMI/DisplayPort cable usually fixes it. Only the main computer actually
+> needs to control the monitor; the other one just has to be paired.
 
-## Features
+## Install
 
-- 🖥️ **DDC/CI Monitor Control** - Switch monitor inputs without physical KVM hardware
-- ⌨️ **Global Hotkeys** - Use keyboard shortcuts or mouse button combinations (e.g., `Mouse2+Mouse3`)
-- 🌐 **Network Switching** - Control multiple computers over LAN with Host/Agent architecture
-- 🔄 **Cross-Platform Hotkey Mapping** - `Ctrl+X` hotkeys auto-map to `Cmd+X` on macOS
-- 💤 **Auto Wake** - Simulates mouse movement to wake sleeping monitors before switching
-
-## Prerequisites
-
-### macOS
-- **Accessibility Permissions**: Required for global hotkey detection
-  - Go to `System Settings` → `Privacy & Security` → `Accessibility`
-  - Add `vkvm` to the allowed apps list
-- **DDC Support**: Works with most external monitors via DDC/CI
+Download the latest release from the
+[Releases page](https://github.com/shimentosh/switchpc/releases).
 
 ### Windows
-- **ControlMyMonitor**: Bundled automatically (no separate install needed)
-- **Administrator Rights**: If the API port is not allowed, VKVM asks for UAC permission after the app starts to create the firewall rule
-- **DDC/CI Enabled**: Enable in your monitor's OSD settings
 
-## Installation
+1. Run **`VKVM-Setup.exe`**. If SmartScreen says *"Windows protected your PC"*, click
+   **More info → Run anyway** (the build isn't code-signed yet).
+2. Keep **"Open VKVM now"** checked and click **Finish**.
 
-### From a Release
+The installer adds VKVM to the Start menu and the desktop, and allows it through Windows
+Firewall so the computers can find each other. VKVM itself runs as a normal app. It never
+asks for administrator rights.
 
-Download the latest build from the [Releases page](https://github.com/shimentosh/switchpc/releases).
+### macOS
 
-#### Windows
-- Run `VKVM-Setup.exe`, or run `vkvm.exe` directly.
-- If SmartScreen shows "Windows protected your PC", click **More info** → **Run anyway**.
+1. Open **`VKVM.dmg`** and drag **VKVM** into **Applications**.
+2. The build isn't notarized by Apple yet, so macOS blocks it on first launch. Allow it once,
+   either way:
+   - Open Terminal and run
+     ```bash
+     xattr -dr com.apple.quarantine /Applications/VKVM.app
+     ```
+     then open VKVM from Applications, **or**
+   - Open VKVM, then go to **System Settings → Privacy & Security** and click **Open Anyway**.
 
-#### macOS
-The macOS build is not notarized by Apple, so Gatekeeper blocks it on first launch
-("cannot be opened because the developer cannot be verified" or "VKVM is damaged").
-Remove the quarantine flag after downloading:
+VKVM lives in the menu bar. The setup window asks for the macOS permissions it needs.
 
-```bash
-# DMG: drag VKVM.app into Applications first, then
-xattr -dr com.apple.quarantine /Applications/VKVM.app
-open /Applications/VKVM.app
+## Set up (about two minutes)
 
-# Standalone binary
-cd ~/Downloads
-xattr -d com.apple.quarantine vkvm-darwin-arm64
-chmod +x vkvm-darwin-arm64
-./vkvm-darwin-arm64
-```
+Set up the **main computer first** (the one your keyboard and mouse are plugged into).
 
-Without Terminal: try to open the app once, then go to `System Settings` →
-`Privacy & Security`, scroll down and click **Open Anyway**.
+**On the main computer**
+1. The VKVM window opens by itself. Enter a name and choose **Main computer**.
+2. VKVM reads which input the monitors are showing right now (this computer's input).
+   Check it and click **Continue**. Use **Test** if you're unsure.
+3. A **6-digit pairing code** appears. Leave it on screen.
 
-Then grant **Accessibility** permission (`System Settings` → `Privacy & Security` →
-`Accessibility`, add VKVM and toggle it on) and restart VKVM so global hotkeys work.
+**On the second computer**
+1. Open VKVM, enter a name and choose **Second computer**.
+2. Pick the main computer from the list (or type its IP address), enter the code, and click
+   **Pair**.
 
-### From Source
+That's it. While pairing, the second computer reports which input *it* is on, so the main
+computer learns both inputs without you typing any codes. Finish the setup on both computers.
 
-> **Windows**: copy `tools\ControlMyMonitor.exe` into `internal\embedded\tools\` before
-> building, otherwise the binary has no DDC backend and fails with "required tool not found".
-> To see logs while testing, build without `-H windowsgui` and run it from a terminal.
-```bash
-# Clone the repository
-git clone https://github.com/aluo96078/vkvm.git
-cd vkvm
+### Use it
 
-# Build for current platform
-go build -o vkvm ./cmd
+- **Hotkeys** work on both computers: `Ctrl+Alt+1` shows the main computer and `Ctrl+Alt+2`
+  shows the second one. On a Mac, `Cmd` works in place of `Ctrl`.
+- The **tray / menu bar icon** has *Switch to …* entries and **Open VKVM**.
+- The **window** (Home tab) has a button for each computer.
 
-# Build for Windows (without console window)
-GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui" -o vkvm.exe ./cmd
+Change hotkeys, monitor inputs and other settings in the window's **Monitors** and
+**Settings** tabs. Profiles and hotkeys are managed on the main computer and synced to the
+second one.
 
-# Build for macOS
-GOOS=darwin GOARCH=arm64 go build -o vkvm ./cmd
-```
+### Keyboard and mouse sharing (optional)
 
-## Usage
+On the main computer go to **Settings → Share keyboard and mouse**. While the monitors show
+the second computer, the main computer's keyboard and mouse control it. Emergency release:
+`Ctrl+Alt+Shift+Esc`.
 
-### Basic Usage
-```bash
-# Start the service (runs in system tray)
-./vkvm
-
-# Open configuration UI
-./vkvm -ui
-```
-
-### System Tray Usage
-
-VKVM runs in the system tray (menu bar on macOS, taskbar notification area on Windows). Right-click the tray icon to access the menu.
-
-#### macOS
-
-![macOS System Tray Menu](./docs/mac/taskbar.png)
-
-The menu bar icon provides quick access to:
-- **Switch profiles** - Click any profile name to switch immediately
-- **Settings...** - Open the configuration UI
-- **Quit** - Exit VKVM
-
-#### Windows
-
-![Windows System Tray Menu](./docs/windows/taskbar.png)
-
-Right-click the system tray icon to:
-- **Switch profiles** - Select any profile to switch
-- **Settings...** - Open the configuration UI
-- **Quit** - Exit VKVM
-
-> 💡 **Tip**: On Windows, you may need to click the "^" arrow in the taskbar to find the VKVM icon if it's hidden in the overflow area.
-
-### Configuration
-
-1. **Open Settings**: Click the tray icon → "Settings..."
-2. **Add Profiles**: Create profiles for each computer (e.g., "PC1", "Mac")
-3. **Set Hotkeys**: Click "🔴 Record" to capture key/mouse combinations
-4. **Configure Monitors**: Select the input source for each monitor per profile
-
-### Network Setup (Multi-Computer)
-
-1. **Host Machine** (main controller):
-   - Set Role: `Host`
-   - Explicitly enable the API server
-   - Set a high-entropy `API Token`; the API will not start without one
-
-2. **Agent Machines** (controlled computers):
-   - Set Role: `Agent`
-   - Enter Host's IP:Port in "Coordinator Address"
-   - Use the same API Token as the Host
-   
-Agent machines will auto-sync profiles from the Host.
-
-> ⚠️ API access and USB input forwarding are disabled by default. Enable them only after pairing the machines on a trusted network; HTTP, WebSocket, and UDP control paths all require authentication.
-
-`Start on boot` installs the interactive user-session launcher (macOS
-LaunchAgent or Windows per-user Run entry). The service keeps the agent's
-authenticated WebSocket dormant when its coordinator is not reachable and
-wakes it after a network fingerprint change; UDP heartbeat loss automatically
-falls back to WebSocket. The current forwarding path is software input
-capture/injection, not a USB/IP device and cannot emulate Secure Input or a
-real HID descriptor.
-
-On Windows, the installer also provides a non-interactive `VKVMCore` SCM
-service (`vkvm.exe --service`) for authenticated networking and supervision;
-the per-user `vkvm.exe --companion` process remains responsible for tray, hooks
-and interactive permissions. It does not bind a second API/UDP listener.
-
-The USB/BLE feasibility decision and hardware-gated follow-up path are
-documented in [`docs/USB_HID_BLE_FEASIBILITY.md`](docs/USB_HID_BLE_FEASIBILITY.md).
-See [`docs/INSTALL.md`](docs/INSTALL.md) for setup and
-[`docs/API.md`](docs/API.md) for the authenticated API surface.
-
-Changes to the API port, role, coordinator address, or API token take effect
-on the next service restart; the UI preserves the existing token when its
-redacted configuration snapshot is saved.
-
-Authenticated `GET /api/metrics` returns bounded receive/injection counters,
-queue depth, p50/p95/p99 samples, clock/path-offset samples, jitter and
-sequence-gap loss. Acceptance thresholds remain operator-supplied from a
-real Windows/macOS hardware baseline.
-
-Agent discovery is pairing-first: it tries each paired last-known endpoint,
-then performs one bounded `_vkvm._tcp` mDNS lookup after boot or a network
-fingerprint change. If no single paired UUID/public-key match is available it
-enters `WaitingForNetworkChange` instead of continuously scanning the LAN.
-
-## Hotkey Examples
-
-| Hotkey | Description |
-|--------|-------------|
-| `Ctrl+Shift+F1` | Switch to Profile 1 |
-| `Mouse2+Mouse3` | Middle + Right mouse buttons |
-| `Ctrl+Alt+1` | Standard modifier combo |
-
-> **Note**: On macOS, `Ctrl+X` hotkeys also respond to `Cmd+X`
-
-## Architecture
-
-```
-┌─────────────────┐         ┌─────────────────┐
-│   Host (Win)    │◄───────►│   Agent (Mac)   │
-│   DDC + API     │  HTTP   │   DDC + API     │
-└─────────────────┘         └─────────────────┘
-        │                           │
-        ▼                           ▼
-   ┌─────────┐                 ┌─────────┐
-   │ Monitor │                 │ Monitor │
-   └─────────┘                 └─────────┘
-```
+- On a **Mac** receiving the input, allow **Accessibility** when asked (Settings tab →
+  *macOS permissions*).
+- On **Windows**, capturing the keyboard and mouse needs VKVM to run as administrator. If
+  sharing doesn't work, start VKVM with *Run as administrator*.
 
 ## Troubleshooting
 
-### macOS: Hotkeys not working
-- Grant Accessibility permissions in System Settings
-- Restart the application after granting permissions
+| Problem | Fix |
+|---|---|
+| "No monitors with DDC/CI found" | Turn on DDC/CI in the monitor menu. Try a direct cable instead of an adapter or dock. |
+| The second computer doesn't find the main one | Same network? Set up the main computer first. Type the main computer's IP (shown on its *Computers* tab). On Windows, reinstalling restores the firewall rule. |
+| Switching picks the wrong input | **Monitors** tab → choose the right input for each computer → **Test**. |
+| Hotkeys do nothing on the Mac | Settings tab → *macOS permissions* → allow **Accessibility**, then restart VKVM. With unsigned builds, macOS asks again after each update. |
+| Nothing happens when starting VKVM | It may already be running in the tray/menu bar. Starting it again opens its window. |
 
-### Windows: DDC commands fail
-- Enable DDC/CI in your monitor's OSD menu
-- Try running as Administrator
-- Check if ControlMyMonitor works manually
+Logs: `%LOCALAPPDATA%\vkvm\vkvm.log` (Windows) or `~/Library/Caches/vkvm/vkvm.log` (macOS).
+The old all-options page is still available under **Settings → Advanced → Classic settings**.
 
-### Network: Agent can't connect to Host
-- Verify Host's API server is enabled
-- Check firewall settings on Host (port 18080 by default)
-- Ensure both machines are on the same network
+## Build from source
 
-### DDC not working with USB-C/Thunderbolt adapters
-> ⚠️ **Important**: Many USB-C/Thunderbolt to HDMI/DisplayPort adapters do NOT support DDC/CI passthrough. This is a hardware limitation.
+Requires Go 1.25+.
 
-- Try using a direct HDMI or DisplayPort cable instead
-- If you must use an adapter, look for one that explicitly supports DDC/CI
-- Some docking stations also block DDC signals
+```bash
+# Windows: exe + installer (installer needs NSIS: choco install nsis)
+powershell -ExecutionPolicy Bypass -File packaging/windows/build.ps1
 
-**Workaround**: If your adapter doesn't support DDC, you can still use VKVM by setting up **Host/Agent mode**. Configure the computer with DDC-capable connections as the **Host**, and the computer with the non-DDC adapter as an **Agent**. When you trigger a switch, the Host will send DDC commands to the monitors while the Agent receives a network notification.
+# macOS: VKVM.app + VKVM.dmg in dist/
+packaging/macos/build-dmg.sh
+
+# Quick dev run (any OS; on Windows copy tools\ControlMyMonitor.exe into
+# internal\embedded\tools\ first)
+go run ./cmd
+```
+
+### Code signing (optional)
+
+Builds are unsigned by default. The scripts are ready for signing:
+
+- **Windows**: set `WINDOWS_CERT_PFX` (path to a .pfx) and `WINDOWS_CERT_PASSWORD` before
+  running `build.ps1`. In GitHub Actions, add the repository secrets `WINDOWS_CERT_PFX_BASE64`
+  and `WINDOWS_CERT_PASSWORD`.
+- **macOS**: set `CODESIGN_IDENTITY` (a *Developer ID Application* identity) and optionally
+  `NOTARY_PROFILE` (a `notarytool` keychain profile) before running `build-dmg.sh`.
+
+### How it works
+
+VKVM runs as a single per-user process with a tray icon. It serves its window UI on
+`127.0.0.1:18079`; the window itself is a native web view (WebView2 on Windows, WebKit on
+macOS) running as a small separate process. The main computer runs an authenticated API on
+port 18080 (advertised over mDNS). Pairing exchanges device keys and the API token using a
+single-use, short-lived 6-digit code. The second computer keeps a WebSocket to the main
+computer for switching, profile sync and the optional input forwarding.
+
+```
+┌──────────────────────┐    LAN (pairing, sync,     ┌──────────────────────┐
+│ Main computer (Host) │◄──── switching, input) ───►│ Second computer      │
+│ tray + window + API  │                            │ (Agent) tray+window  │
+└─────────┬────────────┘                            └──────────┬───────────┘
+          │ DDC/CI                                              │ DDC/CI (optional)
+          ▼                                                     ▼
+                         ┌────────────────────────┐
+                         │ Monitor  HDMI1 │ HDMI2 │
+                         └────────────────────────┘
+```
 
 ## Acknowledgements
 
@@ -240,12 +162,11 @@ VKVM relies on the following excellent open-source tools for DDC/CI communicatio
 | **macOS** | [m1ddc](https://github.com/waydabber/m1ddc) | @waydabber | MIT |
 | **Windows** | [ControlMyMonitor](https://www.nirsoft.net/utils/control_my_monitor.html) | NirSoft | Freeware |
 
-> **m1ddc** - A command-line tool for controlling Apple Silicon Mac displays via DDC/CI.
->
-> **ControlMyMonitor** - A Windows utility for viewing and modifying monitor settings using DDC/CI protocol.
+The native window uses [go-webview2](https://github.com/jchv/go-webview2) (Windows) and
+[webview_go](https://github.com/webview/webview_go) (macOS).
 
-Without these tools, VKVM would not be possible. Thank you to their respective authors!
+The original VKVM is by [aluo96078](https://github.com/aluo96078/vkvm).
 
 ## License
 
-MIT License
+MIT License. See [LICENSE](./LICENSE).

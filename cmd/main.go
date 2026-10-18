@@ -32,10 +32,11 @@ import (
 	"vkvm/internal/switcher"
 	"vkvm/internal/tray"
 	"vkvm/internal/ui"
+	"vkvm/internal/window"
 )
 
 var (
-	version       = "0.2.2"
+	version       = "0.3.0"
 	showUI        = flag.Bool("ui", false, "Open the configuration UI")
 	listMons      = flag.Bool("list", false, "List connected monitors")
 	switchTo      = flag.String("switch", "", "Switch to profile name")
@@ -48,6 +49,11 @@ var (
 
 func main() {
 	flag.Parse()
+
+	if *windowURL != "" {
+		window.Run(*windowURL)
+		return
+	}
 
 	if *showVer {
 		fmt.Printf("vkvm version %s\n", version)
@@ -75,9 +81,9 @@ func main() {
 		return
 	}
 
-	// Handle --ui flag
-	if *showUI {
-		runUI(cfgMgr)
+	// Handle --ui flag: open the window of the running app, or start the
+	// app with its window open.
+	if *showUI && ui.ActivateRunning(ui.DefaultAppPort) {
 		return
 	}
 
@@ -108,8 +114,13 @@ func main() {
 		return
 	}
 
-	// Default: run as background service
+	// Default: run the app (tray, core and window server).
+	setupLogFile()
+	if !startAppUI(cfgMgr) {
+		return
+	}
 	runService(cfgMgr)
+	finishApp()
 }
 
 func listMonitors(cfgMgr *config.Manager) {
@@ -691,6 +702,10 @@ func runServiceContextMode(cfgMgr *config.Manager, parent context.Context, inter
 	if err != nil {
 		return fmt.Errorf("failed to create switcher: %w", err)
 	}
+	if interactive && appUI != nil {
+		appUI.SetSwitcher(sw)
+		appUI.SetRunningConfig(cfgMgr.Get())
+	}
 
 	// Input trap for host mode
 	var inputTrap *input.Trap
@@ -947,6 +962,7 @@ func runServiceContextMode(cfgMgr *config.Manager, parent context.Context, inter
 	}
 	if cfg.General.APIEnabled {
 		apiServer = api.NewServer(cfgMgr, sw)
+		apiServer.SetPairing(pairingMgr)
 		apiServer.SetPermissionProvider(input.CurrentPermissions)
 		apiServer.SetServiceStatusProvider(serviceStatus.Snapshot)
 		apiServer.SetInputMetrics(inputMetrics)
@@ -1626,7 +1642,7 @@ func runServiceContextMode(cfgMgr *config.Manager, parent context.Context, inter
 					return
 				}
 				log.Printf("Hotkey: Opening Settings UI...")
-				go runUIWithSwitcher(cfgMgr, sw, nil, nil)
+				showWindow()
 			})
 			if err != nil {
 				log.Printf("Warning: failed to register settings hotkey: %v", err)
@@ -1640,7 +1656,7 @@ func runServiceContextMode(cfgMgr *config.Manager, parent context.Context, inter
 						return
 					}
 					log.Printf("Hotkey: Opening Settings UI...")
-					go runUIWithSwitcher(cfgMgr, sw, nil, nil)
+					showWindow()
 				})
 			}
 		}
@@ -1763,29 +1779,48 @@ func runServiceContextMode(cfgMgr *config.Manager, parent context.Context, inter
 
 	// Tray instance
 	t := tray.New("VKVM - KVM Switcher")
-
-	// Add menu items for each profile (Note: Tray menu currently only supports initial setup)
-	for _, profile := range cfg.Profiles {
-		profileName := profile.Name // Capture for closure
-		t.AddMenuItem(fmt.Sprintf("Switch to %s", profileName), func() {
-			if err := sw.SwitchToProfile(profileName); err != nil {
-				log.Printf("Switch error: %v", err)
-			}
-		})
-	}
-
+	t.AddMenuItem("Open VKVM", showWindow)
 	t.AddSeparator()
-
-	t.AddMenuItem("Settings...", func() {
-		go runUIWithSwitcher(cfgMgr, sw, nil, nil)
+	t.AddProfiles(func(name string) {
+		if err := sw.SwitchToProfile(name); err != nil {
+			log.Printf("Switch error: %v", err)
+		}
 	})
-
 	t.AddSeparator()
-
-	t.AddMenuItem("Quit", func() {
+	t.AddMenuItem("Quit VKVM", func() {
+		log.Println("Quit from the tray menu")
 		shutdown()
 		t.Stop()
 	})
+	updateTrayProfiles := func() {
+		current := cfgMgr.Get()
+		names := make([]string, 0, len(current.Profiles))
+		for _, p := range current.Profiles {
+			names = append(names, p.Name)
+		}
+		t.SetProfiles(names, current.General.CurrentProfile)
+	}
+	updateTrayProfiles()
+	cfgMgr.RegisterChangeCallback(updateTrayProfiles)
+	setQuit(func() {
+		shutdown()
+		t.Stop()
+	})
+	defer setQuit(nil)
+	// First launch, or launched with -ui / after a restart from the window:
+	// open the window once the tray is up.
+	if !cfg.General.SetupComplete || *showUI {
+		go func() {
+			// After a restart an open window reconnects by itself; only open
+			// one if none came back.
+			delay := 700 * time.Millisecond
+			if *restarted {
+				delay = 4 * time.Second
+			}
+			time.Sleep(delay)
+			showWindow()
+		}()
+	}
 
 	// Handle signals
 	sigCh := make(chan os.Signal, 1)

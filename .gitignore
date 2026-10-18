@@ -44,3 +44,7 @@ internal/embedded/tools/*.exe
 !internal/embedded/tools/.gitkeep
 vkvm-*.exe
 vkvm-macos-test
+# Build output
+dist/
+VKVM-Setup.exe
+cmd/*.syso
