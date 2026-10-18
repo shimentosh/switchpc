@@ -36,7 +36,7 @@ import (
 )
 
 var (
-	version       = "0.3.3"
+	version       = "0.3.4"
 	showUI        = flag.Bool("ui", false, "Open the configuration UI")
 	listMons      = flag.Bool("list", false, "List connected monitors")
 	switchTo      = flag.String("switch", "", "Switch to profile name")

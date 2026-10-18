@@ -25,6 +25,7 @@ import (
 	"vkvm/internal/autostart"
 	"vkvm/internal/brand"
 	"vkvm/internal/config"
+	"vkvm/internal/ddc"
 	"vkvm/internal/input"
 	"vkvm/internal/network"
 	"vkvm/internal/pairing"
@@ -125,6 +126,8 @@ func (s *Server) Serve() error {
 	mux.HandleFunc("/api/app/quit", s.handleQuit)
 	mux.HandleFunc("/api/state", s.handleState)
 	mux.HandleFunc("/api/monitors/detect", s.handleDetect)
+	mux.HandleFunc("/api/monitors/possible", s.handlePossibleInputs)
+	mux.HandleFunc("/api/monitors/try", s.handleTryInput)
 	mux.HandleFunc("/api/setup/role", s.handleSetupRole)
 	mux.HandleFunc("/api/setup/finish", s.handleSetupFinish)
 	mux.HandleFunc("/api/profile", s.handleProfile)
@@ -457,6 +460,66 @@ func (s *Server) handleDetect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, monitors)
+}
+
+// handlePossibleInputs lists the input values a monitor says it accepts.
+func (s *Server) handlePossibleInputs(w http.ResponseWriter, r *http.Request) {
+	sw := s.sw()
+	if sw == nil {
+		http.Error(w, "monitor control is unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	values, err := sw.PossibleInputs(r.URL.Query().Get("monitor"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	if values == nil {
+		values = []int{}
+	}
+	writeJSON(w, values)
+}
+
+// handleTryInput switches a monitor to an input and, after a few seconds,
+// back to this computer's input, so the user can see which value shows the
+// other computer while this screen is away.
+func (s *Server) handleTryInput(w http.ResponseWriter, r *http.Request) {
+	if !requirePost(w, r) {
+		return
+	}
+	var req struct {
+		Monitor string `json:"monitor"`
+		Input   int    `json:"input"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	sw := s.sw()
+	if sw == nil || req.Monitor == "" || req.Input <= 0 {
+		http.Error(w, "monitor and input are required", http.StatusBadRequest)
+		return
+	}
+	cfg := s.configMgr.Get()
+	back := 0
+	for _, p := range cfg.Profiles {
+		if p.Name == ThisProfile(cfg) {
+			back = p.MonitorInputs[req.Monitor]
+		}
+	}
+	if err := sw.TestMonitor(req.Monitor, ddc.InputSource(req.Input)); err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	const returnAfter = 10
+	if back > 0 && back != req.Input {
+		go func() {
+			time.Sleep(returnAfter * time.Second)
+			if err := sw.TestMonitor(req.Monitor, ddc.InputSource(back)); err != nil {
+				log.Printf("Try input: switching back to %d failed: %v", back, err)
+			}
+		}()
+	}
+	writeJSON(w, map[string]int{"returns_to": back, "after_seconds": returnAfter})
 }
 
 // handleSetupRole sets this computer's name and whether it is the main

@@ -498,3 +498,32 @@ func (c *windowsController) TestDDCSupport(monitorID string) bool {
 
 	return false
 }
+
+// PossibleInputs returns the input values (VCP 0x60) the monitor lists as
+// valid in its capabilities, for example [17 18 15 16].
+func (c *windowsController) PossibleInputs(monitorID string) ([]int, error) {
+	outputBytes, err := c.runWithTempFile("/scomma", "/Monitor", monitorID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrCommandFailed, err)
+	}
+	reader := csv.NewReader(strings.NewReader(decodeUTF16(outputBytes)))
+	reader.FieldsPerRecord = -1
+	records, err := reader.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+	for _, record := range records {
+		// VCP Code, Name, Read-Write, Current, Maximum, Possible Values
+		if len(record) < 6 || strings.TrimSpace(record[0]) != "60" {
+			continue
+		}
+		var values []int
+		for _, part := range strings.Split(record[5], ",") {
+			if v, err := strconv.Atoi(strings.TrimSpace(part)); err == nil && v > 0 {
+				values = append(values, v)
+			}
+		}
+		return values, nil
+	}
+	return nil, nil
+}

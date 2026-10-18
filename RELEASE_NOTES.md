@@ -1,3 +1,13 @@
+# VKVM 0.3.4
+
+## New
+
+- **Find the right input.** Some monitors number their inputs differently
+  from the port names. The Monitors tab now lists the input numbers the
+  monitor itself reports and has a *Try* button for each: the monitor
+  switches, then comes back after 10 seconds, so you can see which number
+  shows the other computer. Input menus show the number next to the name.
+
 # VKVM 0.3.3
 
 ## Fixes

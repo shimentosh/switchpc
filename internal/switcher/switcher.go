@@ -449,6 +449,17 @@ func (s *Switcher) TestMonitor(monitorID string, input ddc.InputSource) error {
 	return s.controller.SetInputSource(monitorID, input)
 }
 
+// PossibleInputs lists the input values a monitor reports as valid, when the
+// platform backend can read them (Windows). It returns nil otherwise.
+func (s *Switcher) PossibleInputs(monitorID string) ([]int, error) {
+	if p, ok := s.controller.(interface {
+		PossibleInputs(string) ([]int, error)
+	}); ok {
+		return p.PossibleInputs(monitorID)
+	}
+	return nil, nil
+}
+
 // IsConnectedToCheck returns true if the agent is connected to the host
 func (s *Switcher) IsConnectedToCheck() bool {
 	s.mu.Lock()

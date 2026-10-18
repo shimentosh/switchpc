@@ -175,7 +175,7 @@ function stepRole(el, go) {
 
 function inputSelect(value, attrs = '') {
   const known = INPUTS.some(i => i[0] === value);
-  const opts = INPUTS.map(([v, n]) => `<option value="${v}" ${v === value ? 'selected' : ''}>${n}</option>`).join('');
+  const opts = INPUTS.map(([v, n]) => `<option value="${v}" ${v === value ? 'selected' : ''}>${n} (${v})</option>`).join('');
   const other = !known && value ? `<option value="${value}" selected>Input ${value}</option>` : '';
   return `<select ${attrs}><option value="0" ${!value ? 'selected' : ''}>Not set</option>${opts}${other}<option value="other">Other…</option></select>`;
 }
@@ -532,8 +532,14 @@ async function tabMonitors() {
     ${error ? `<div class="notice bad">${esc(error)}</div>` : ''}
     <div class="card">${monitors.length ? `<table><thead><tr><th>Monitor</th>${head}</tr></thead><tbody>${rows}</tbody></table>`
       : '<p class="muted">No monitors with DDC/CI found. Turn on DDC/CI in the monitor menu and refresh.</p>'}</div>
+    ${host && monitors.length ? `<div class="card"><h2>Not switching to the right input?</h2>
+      <p class="muted small">Some monitors number their inputs differently from the names. Click <b>Try</b> on each number
+        and watch the monitor: it switches, then comes back here after 10 seconds. When you see the other computer,
+        pick that number in the table above.</p>
+      <div id="try-area"><p class="muted small"><span class="spinner inline"></span> Asking the monitor which inputs it has…</p></div></div>` : ''}
     <p class="muted small">Tip: switch the monitor to a computer, then click Refresh — "Now" shows the input it is on.</p>`;
   $('#reload').onclick = tabMonitors;
+  if (host && monitors.length) renderTryArea(monitors);
   view.querySelectorAll('tr[data-id] select').forEach(sel => sel.onchange = async () => {
     const v = readSelect(sel);
     const id = sel.closest('tr').dataset.id;
@@ -549,6 +555,26 @@ async function tabMonitors() {
     const id = b.closest('tr').dataset.id;
     try { await api(`/api/test?monitor=${encodeURIComponent(id)}&input=${Number(sel.value)}`, { method: 'POST' }); toast('Sent ' + inputName(Number(sel.value))); }
     catch (e) { toast(e.message, true); }
+  });
+}
+
+// "Try" buttons for every input value the monitor reports as valid.
+async function renderTryArea(monitors) {
+  const area = $('#try-area');
+  const rows = await Promise.all(monitors.map(async m => {
+    let values = [];
+    try { values = await api('/api/monitors/possible?monitor=' + encodeURIComponent(m.id)); } catch { /* fall back */ }
+    if (!values.length) values = INPUTS.slice(0, 5).map(i => i[0]);
+    const buttons = values.map(v => `<button class="btn small try" data-id="${esc(m.id)}" data-v="${v}">Try ${v} · ${esc(inputName(v))}</button>`).join('');
+    return `<div class="setting"><div class="grow"><b>${esc(m.name || 'Monitor')}</b></div><div class="row">${buttons}</div></div>`;
+  }));
+  if (!area.isConnected) return;
+  area.innerHTML = rows.join('');
+  area.querySelectorAll('button.try').forEach(b => b.onclick = async () => {
+    try {
+      const res = await post('/api/monitors/try', { monitor: b.dataset.id, input: Number(b.dataset.v) });
+      toast(res.returns_to ? `Showing input ${b.dataset.v} — coming back in ${res.after_seconds} s` : `Showing input ${b.dataset.v}`);
+    } catch (e) { toast(e.message, true); }
   });
 }
 
