@@ -120,6 +120,8 @@ label.field input[type=text] { width: 100%; max-width: 360px; }
 
 .notice { border-radius: 10px; padding: 10px 14px; margin: 12px 0; font-size: 13px; }
 .notice.warn { background: var(--warn-soft); color: var(--warn); }
+.notice.row { display: flex; }
+.notice select { background: var(--panel); color: var(--text); }
 .notice.bad { background: var(--bad-soft); color: var(--bad); }
 .notice.ok { background: var(--ok-soft); color: var(--ok); }
 .notice.info { background: var(--accent-soft); color: var(--accent); }

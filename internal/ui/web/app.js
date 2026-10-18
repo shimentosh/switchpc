@@ -76,6 +76,7 @@ async function restartApp() {
 
 // Long poll so the app can bring this window to the front.
 // When VKVM has quit (not restarted) the window closes itself after a while.
+// If VKVM stopped without restarting, the window starts it again once.
 async function eventLoop() {
   let failures = 0;
   for (;;) {
@@ -85,6 +86,10 @@ async function eventLoop() {
       if (ev.focus && window.vkvmFocus) window.vkvmFocus();
     } catch {
       failures++;
+      if (failures === 6 && window.vkvmStartApp) {
+        $('#offline-text').textContent = 'Starting VKVM…';
+        window.vkvmStartApp();
+      }
       if (failures > 40 && window.vkvmClose) window.vkvmClose();
       await sleep(1500);
       if (offline) await refresh();
@@ -300,6 +305,10 @@ function joinPanel(el, onJoined) {
     </div>
     <label class="field"><span>Pairing code</span>
       <input type="text" id="code" class="code-input" inputmode="numeric" maxlength="7" placeholder="000000" autocomplete="off"></label>
+    <label class="field"><span>This computer is plugged into the monitor's</span>
+      <select id="my-input"><option value="0">Detect automatically</option>
+        ${INPUTS.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select>
+      <span class="muted small" style="display:block;margin-top:6px">Pick it if you know it (for example HDMI 2). Not every monitor reports it.</span></label>
     <div class="row end"><button class="btn primary" id="join">Pair</button></div>`;
   const hostsEl = el.querySelector('#hosts');
   const scan = async () => {
@@ -332,9 +341,11 @@ function joinPanel(el, onJoined) {
     const btn = el.querySelector('#join');
     btn.disabled = true;
     try {
-      const res = await post('/api/pair/join', { address, code });
+      btn.innerHTML = '<span class="spinner inline"></span> Pairing…';
+      const input = Number(el.querySelector('#my-input').value) || 0;
+      const res = await post('/api/pair/join', { address, code, input });
       await onJoined(res);
-    } catch (e) { toast(e.message, true); btn.disabled = false; }
+    } catch (e) { toast(e.message, true); btn.disabled = false; btn.textContent = 'Pair'; }
   };
   scan();
 }
@@ -436,8 +447,29 @@ function missingInputs(s) {
   if (s.role === 'agent') return '';
   const empty = (s.profiles || []).filter(p => !Object.keys(p.monitor_inputs || {}).length).map(p => esc(p.name));
   if (!empty.length) return '';
-  return `<div class="notice warn">No monitor input set for ${empty.join(' and ')} yet.
-    <a href="#monitors" id="fix-inputs">Set it on the Monitors tab</a>.</div>`;
+  const opts = INPUTS.map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
+  return (s.profiles || []).filter(p => !Object.keys(p.monitor_inputs || {}).length).map(p => `
+    <div class="notice warn row">
+      <span>Which input is <b>${esc(p.name)}</b> plugged into?</span>
+      <select class="quick-input" data-profile="${esc(p.name)}"><option value="0">Choose…</option>${opts}</select>
+      <a href="#monitors" class="fix-inputs small">More options</a>
+    </div>`).join('');
+}
+
+// Sets one input for every monitor of a profile (the common one-input-per-computer case).
+async function quickSetInput(sel) {
+  const v = Number(sel.value);
+  if (!v) return;
+  sel.disabled = true;
+  try {
+    const monitors = await api('/api/monitors/detect');
+    if (!monitors.length) throw new Error('No monitors found. Turn on DDC/CI in the monitor menu.');
+    const set = {};
+    monitors.forEach(m => { set[m.id] = v; });
+    await post('/api/profile', { name: sel.dataset.profile, set_inputs: set });
+    toast(`${sel.dataset.profile} uses ${inputName(v)}`);
+    await refresh();
+  } catch (e) { toast(e.message, true); sel.disabled = false; }
 }
 
 function tabHome() {
@@ -468,8 +500,8 @@ function tabHome() {
     catch (e) { toast(e.message, true); }
     await refresh();
   });
-  const fix = $('#fix-inputs');
-  if (fix) fix.onclick = e => { e.preventDefault(); tab = 'monitors'; render(); };
+  view.querySelectorAll('.fix-inputs').forEach(a => a.onclick = e => { e.preventDefault(); tab = 'monitors'; render(); });
+  view.querySelectorAll('select.quick-input').forEach(sel => sel.onchange = () => quickSetInput(sel));
   const gp = $('#go-pair');
   if (gp) gp.onclick = () => { tab = 'computers'; render(); };
   $('#sleep').onclick = () => api('/api/sleep-display', { method: 'POST' }).catch(e => toast(e.message, true));

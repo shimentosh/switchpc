@@ -95,3 +95,23 @@ func TestMatchInputsSingleMonitorFallbackAndAmbiguity(t *testing.T) {
 		t.Fatalf("ambiguous names must not guess: %v %d", got, unmatched)
 	}
 }
+
+func TestReplayRepeatsTheAnswerForTheSameDeviceAndCode(t *testing.T) {
+	now := time.Unix(5000, 0)
+	m := NewManager()
+	m.now = func() time.Time { return now }
+	m.Remember("123 456", "mac", Response{Token: "tok"})
+	if r, ok := m.Replay("123456", "mac"); !ok || r.Token != "tok" {
+		t.Fatalf("replay with same code and device: %v %v", r, ok)
+	}
+	if _, ok := m.Replay("123456", "other"); ok {
+		t.Fatal("another device must not get the answer")
+	}
+	if _, ok := m.Replay("654321", "mac"); ok {
+		t.Fatal("a different code must not replay")
+	}
+	now = now.Add(ReplayWindow + time.Second)
+	if _, ok := m.Replay("123456", "mac"); ok {
+		t.Fatal("replay must expire")
+	}
+}

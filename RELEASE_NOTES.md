@@ -1,3 +1,22 @@
+# VKVM 0.3.1
+
+## Fixes
+
+- **macOS: VKVM no longer disappears when it restarts** (for example after
+  choosing *Second computer*). Quitting the menu bar app ended the process
+  before the restart could happen; the new copy is now started first.
+- **Pairing no longer times out.** The main computer answers right away and
+  reads its monitors in the background (this can take many seconds on
+  Windows). Pressing *Pair* again with the same code now succeeds instead of
+  failing.
+- **Choose the input yourself while pairing.** The join screen asks which
+  input this computer is plugged into (for example HDMI 2) for monitors that
+  don't report it. On the main computer, Home shows a one-click picker when a
+  computer has no input yet.
+- If VKVM stops while its window is open, the window starts it again.
+- macOS login item: the window and the restarted copy are no longer stopped
+  together with the original process.
+
 # VKVM 0.3.0
 
 ## Install and go

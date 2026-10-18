@@ -57,6 +57,13 @@ func (s *Server) handlePairClaim(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "a computer cannot pair with itself", http.StatusBadRequest)
 		return
 	}
+	// A repeat of a claim that already succeeded (the first reply was lost or
+	// too slow) gets the same answer instead of "pairing is not open".
+	if resp, ok := manager.Replay(req.Code, req.DeviceID); ok {
+		log.Printf("Pairing: repeated claim from %s answered again", req.Name)
+		writePairResponse(w, resp)
+		return
+	}
 	if err := manager.Verify(req.Code); err != nil {
 		status := http.StatusForbidden
 		if errors.Is(err, pairing.ErrWrongCode) {
@@ -78,17 +85,6 @@ func (s *Server) handlePairClaim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build the Agent's profile from the inputs it is showing right now.
-	var local []pairing.LocalMonitor
-	if s.switcher != nil {
-		if monitors, err := s.switcher.ListMonitors(); err == nil {
-			for _, m := range monitors {
-				local = append(local, pairing.LocalMonitor{ID: m.ID, Name: m.Name, Serial: m.Serial})
-			}
-		}
-	}
-	inputs, unmatched := pairing.MatchInputs(local, req.Monitors)
-
 	cfg = s.configMgr.Get()
 	hostProfile := cfg.General.DisplayName
 	if hostProfile == "" && len(cfg.Profiles) > 0 {
@@ -99,14 +95,13 @@ func (s *Server) handlePairClaim(w http.ResponseWriter, r *http.Request) {
 	for i := range cfg.Profiles {
 		if cfg.Profiles[i].Name == cfg.General.PeerProfile && cfg.General.PeerProfile != "" {
 			cfg.Profiles[i].Name = profileName
-			cfg.Profiles[i].MonitorInputs = inputs
 			replaced = true
 			break
 		}
 	}
 	if !replaced {
 		cfg.Profiles = append(cfg.Profiles, config.Profile{
-			Name: profileName, Hotkey: nextFreeHotkey(cfg), MonitorInputs: inputs,
+			Name: profileName, Hotkey: nextFreeHotkey(cfg), MonitorInputs: map[string]int{},
 		})
 	}
 	if cfg.General.USBForwardingEnabled {
@@ -118,11 +113,10 @@ func (s *Server) handlePairClaim(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to save pairing", http.StatusInternalServerError)
 		return
 	}
-	manager.RecordPaired(pairing.Event{Name: profileName, DeviceID: req.DeviceID, Unmatched: unmatched})
-	log.Printf("Pairing: paired %s (%s, %s) from %s; %d monitor(s) without an input", profileName, req.OS, req.DeviceID, endpoint, unmatched)
+	manager.RecordPaired(pairing.Event{Name: profileName, DeviceID: req.DeviceID})
+	log.Printf("Pairing: paired %s (%s, %s) from %s", profileName, req.OS, req.DeviceID, endpoint)
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(pairing.Response{
+	resp := pairing.Response{
 		DeviceID:    cfg.General.DeviceID,
 		PublicKey:   cfg.General.IdentityPublicKey,
 		Name:        hostProfile,
@@ -130,8 +124,80 @@ func (s *Server) handlePairClaim(w http.ResponseWriter, r *http.Request) {
 		Port:        cfg.General.APIPort,
 		ProfileName: profileName,
 		HostProfile: hostProfile,
-		Unmatched:   unmatched,
-	})
+	}
+	manager.Remember(req.Code, req.DeviceID, resp)
+	writePairResponse(w, resp)
+
+	// Reading monitors over DDC/CI can take many seconds on Windows, so the
+	// Agent's inputs are filled in after answering.
+	go s.learnPeerInputs(manager, profileName, req)
+}
+
+func writePairResponse(w http.ResponseWriter, resp pairing.Response) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// learnPeerInputs maps the inputs the Agent reported onto this computer's
+// monitors and stores them in the Agent's profile. Inputs already set by hand
+// are kept.
+func (s *Server) learnPeerInputs(manager *pairing.Manager, profileName string, req pairing.Request) {
+	var local []pairing.LocalMonitor
+	for attempt := 0; attempt < 3 && len(local) == 0; attempt++ {
+		if attempt > 0 {
+			time.Sleep(2 * time.Second)
+		}
+		if s.switcher == nil {
+			break
+		}
+		monitors, err := s.switcher.ListMonitors()
+		if err != nil {
+			log.Printf("Pairing: reading monitors failed: %v", err)
+			continue
+		}
+		for _, m := range monitors {
+			local = append(local, pairing.LocalMonitor{ID: m.ID, Name: m.Name, Serial: m.Serial})
+		}
+	}
+	inputs, _ := pairing.MatchInputs(local, req.Monitors)
+	if req.DefaultInput > 0 {
+		for _, m := range local {
+			if _, ok := inputs[m.ID]; !ok {
+				inputs[m.ID] = req.DefaultInput
+			}
+		}
+	}
+
+	cfg := s.configMgr.Get()
+	unmatched := 0
+	for i := range cfg.Profiles {
+		p := &cfg.Profiles[i]
+		if p.Name != profileName {
+			continue
+		}
+		if p.MonitorInputs == nil {
+			p.MonitorInputs = map[string]int{}
+		}
+		for id, v := range inputs {
+			if _, set := p.MonitorInputs[id]; !set {
+				p.MonitorInputs[id] = v
+			}
+		}
+		for _, m := range local {
+			if _, ok := p.MonitorInputs[m.ID]; !ok {
+				unmatched++
+			}
+		}
+		if len(local) == 0 && len(p.MonitorInputs) == 0 {
+			unmatched = 1
+		}
+	}
+	s.configMgr.Set(cfg)
+	if err := s.configMgr.Save(); err != nil {
+		log.Printf("Pairing: saving %s's inputs failed: %v", profileName, err)
+	}
+	manager.UpdateUnmatched(req.DeviceID, unmatched)
+	log.Printf("Pairing: %s inputs %v; %d monitor(s) still without an input", profileName, inputs, unmatched)
 }
 
 // uniqueProfileName returns want, or want with a number appended when another

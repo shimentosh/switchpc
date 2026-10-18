@@ -768,6 +768,7 @@ func (s *Server) handlePairJoin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Address string `json:"address"`
 		Code    string `json:"code"`
+		Input   int    `json:"input"` // optional: the input this computer is on
 	}
 	if !decodeBody(w, r, &req) {
 		return
@@ -793,15 +794,19 @@ func (s *Server) handlePairJoin(w http.ResponseWriter, r *http.Request) {
 	}
 	claim := pairing.Request{
 		Code: req.Code, DeviceID: cfg.General.DeviceID, PublicKey: cfg.General.IdentityPublicKey,
-		Name: name, OS: runtime.GOOS,
+		Name: name, OS: runtime.GOOS, DefaultInput: req.Input,
 	}
 	if monitors, err := s.detectMonitors(); err == nil {
 		for _, m := range monitors {
-			claim.Monitors = append(claim.Monitors, pairing.MonitorInput{ID: m.ID, Name: m.Name, Serial: m.Serial, Input: m.CurrentInput})
+			in := m.CurrentInput
+			if req.Input > 0 {
+				in = req.Input
+			}
+			claim.Monitors = append(claim.Monitors, pairing.MonitorInput{ID: m.ID, Name: m.Name, Serial: m.Serial, Input: in})
 		}
 	}
 	body, _ := json.Marshal(claim)
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{Timeout: 45 * time.Second}
 	resp, err := client.Post("http://"+addr+"/api/pair/claim", "application/json", bytes.NewReader(body))
 	if err != nil {
 		http.Error(w, "could not reach the main computer: "+err.Error(), http.StatusBadGateway)

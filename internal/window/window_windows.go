@@ -90,6 +90,7 @@ func runNative(url string) error {
 			procSetForegroundWindow.Call(hwnd)
 		})
 	})
+	_ = w.Bind("vkvmStartApp", startApp)
 	_ = w.Bind("vkvmClose", func() {
 		w.Dispatch(w.Terminate)
 	})

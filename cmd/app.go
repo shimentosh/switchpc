@@ -63,7 +63,14 @@ func startAppUI(cfgMgr *config.Manager) bool {
 	}
 	server.SetLifecycle(
 		func() {
+			// Start the replacement first: on macOS quitting the tray ends the
+			// process inside AppKit, so nothing after requestQuit would run.
+			// The new process waits until this one has released the ports.
 			restartRequested.Store(true)
+			if err := startDetached("-restarted"); err != nil {
+				log.Printf("Restart failed: %v", err)
+				return
+			}
 			requestQuit()
 		},
 		requestQuit,
@@ -128,24 +135,25 @@ func setupLogFile() {
 	log.Printf("---- VKVM %s starting (pid %d) ----", version, os.Getpid())
 }
 
-// finishApp closes the app server and, if a restart was requested, starts a
-// fresh VKVM process that takes over once this one has exited.
+// finishApp closes the app server once the core has stopped.
 func finishApp() {
 	if appUI != nil {
 		_ = appUI.Stop()
 	}
-	if !restartRequested.Load() {
-		return
-	}
+}
+
+// startDetached starts another VKVM process that outlives this one.
+func startDetached(args ...string) error {
 	exe, err := os.Executable()
 	if err != nil {
-		log.Printf("Restart failed: %v", err)
-		return
+		return err
 	}
-	cmd := exec.Command(exe, "-restarted")
+	cmd := exec.Command(exe, args...)
+	detach(cmd)
 	if err := cmd.Start(); err != nil {
-		log.Printf("Restart failed: %v", err)
-		return
+		return err
 	}
-	log.Printf("Restarting VKVM (pid %d)", cmd.Process.Pid)
+	log.Printf("Started VKVM %v (pid %d)", args, cmd.Process.Pid)
+	go func() { _ = cmd.Wait() }()
+	return nil
 }

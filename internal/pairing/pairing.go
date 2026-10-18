@@ -49,6 +49,9 @@ type Request struct {
 	Name      string         `json:"name"`
 	OS        string         `json:"os"`
 	Monitors  []MonitorInput `json:"monitors"`
+	// DefaultInput is the input the user said this computer is on. It fills
+	// every monitor that could not be matched automatically.
+	DefaultInput int `json:"default_input,omitempty"`
 }
 
 // Response is the Host's answer to a successful claim.
@@ -87,6 +90,43 @@ type Manager struct {
 	failures int
 	last     *Event
 	now      func() time.Time
+
+	// The answer to the last successful claim, so a retry with the same code
+	// (for example after the reply timed out) gets the same answer.
+	lastCode     string
+	lastDevice   string
+	lastResponse *Response
+	lastAt       time.Time
+}
+
+// ReplayWindow is how long a successful claim can be repeated.
+const ReplayWindow = 3 * time.Minute
+
+// Remember stores the answer to a successful claim for Replay.
+func (m *Manager) Remember(code, deviceID string, resp Response) {
+	m.mu.Lock()
+	m.lastCode = normalize(code)
+	m.lastDevice = deviceID
+	m.lastResponse = &resp
+	m.lastAt = m.now()
+	m.mu.Unlock()
+}
+
+// Replay returns the stored answer when the same device repeats a claim that
+// already succeeded with the same code.
+func (m *Manager) Replay(code, deviceID string) (Response, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.lastResponse == nil || deviceID == "" || deviceID != m.lastDevice ||
+		m.now().Sub(m.lastAt) > ReplayWindow ||
+		subtle.ConstantTimeCompare([]byte(normalize(code)), []byte(m.lastCode)) != 1 {
+		return Response{}, false
+	}
+	return *m.lastResponse, true
+}
+
+func normalize(code string) string {
+	return strings.TrimSpace(strings.ReplaceAll(code, " ", ""))
 }
 
 // NewManager returns a closed pairing manager.
@@ -134,7 +174,7 @@ func (m *Manager) Status() Status {
 // Verify checks a submitted code. A correct code is consumed so it cannot be
 // replayed; repeated wrong codes close pairing.
 func (m *Manager) Verify(code string) error {
-	code = strings.TrimSpace(strings.ReplaceAll(code, " ", ""))
+	code = normalize(code)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.code == "" {
@@ -154,6 +194,18 @@ func (m *Manager) Verify(code string) error {
 	}
 	m.code = ""
 	return nil
+}
+
+// UpdateUnmatched updates the unmatched-monitor count of the last pairing
+// once the Host has finished reading its monitors.
+func (m *Manager) UpdateUnmatched(deviceID string, unmatched int) {
+	m.mu.Lock()
+	if m.last != nil && m.last.DeviceID == deviceID {
+		ev := *m.last
+		ev.Unmatched = unmatched
+		m.last = &ev
+	}
+	m.mu.Unlock()
 }
 
 // RecordPaired stores the last successful pairing for the Host UI.

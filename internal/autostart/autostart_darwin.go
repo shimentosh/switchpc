@@ -30,6 +30,8 @@ const macLaunchAgentPlist = `<?xml version="1.0" encoding="UTF-8"?>
         <key>SuccessfulExit</key>
         <false/>
     </dict>
+    <key>AbandonProcessGroup</key>
+    <true/>
     <key>ThrottleInterval</key>
     <integer>10</integer>
     <key>ProcessType</key>
@@ -43,6 +45,8 @@ const macLaunchAgentPlist = `<?xml version="1.0" encoding="UTF-8"?>
 
 // KeepAlive relaunches VKVM only after a crash: Quit and the self-restart
 // exit cleanly and must not be undone (or doubled) by launchd.
+// AbandonProcessGroup keeps the app window and the restarted VKVM alive when
+// the process launchd started exits.
 //
 // renderLaunchAgentPlist renders the LaunchAgent document without escaping the
 // XML markup itself. html/template is intentionally not used here: it would

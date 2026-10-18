@@ -8,6 +8,7 @@ package window
 
 import (
 	"log"
+	"os"
 	"os/exec"
 	"runtime"
 )
@@ -43,4 +44,20 @@ func OpenBrowser(url string) {
 	if err != nil {
 		log.Printf("Failed to open browser: %v", err)
 	}
+}
+
+// startApp launches the VKVM app (tray and core) again when the window finds
+// it is no longer running. A second copy exits by itself if one is running.
+func startApp() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cmd := exec.Command(exe)
+	detach(cmd)
+	if err := cmd.Start(); err != nil {
+		log.Printf("Window: could not start VKVM: %v", err)
+		return
+	}
+	go func() { _ = cmd.Wait() }()
 }

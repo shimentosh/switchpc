@@ -39,6 +39,7 @@ func runNative(url string) error {
 	_ = w.Bind("vkvmFocus", func() {
 		w.Dispatch(func() { C.vkvmFocusWindow(win) })
 	})
+	_ = w.Bind("vkvmStartApp", startApp)
 	_ = w.Bind("vkvmClose", func() {
 		w.Dispatch(w.Terminate)
 	})
