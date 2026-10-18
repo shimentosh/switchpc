@@ -131,8 +131,22 @@ func setupLogFile() {
 	if err != nil {
 		return
 	}
-	log.SetOutput(io.MultiWriter(os.Stderr, f))
+	log.SetOutput(teeWriter{f, os.Stderr})
 	log.Printf("---- VKVM %s starting (pid %d) ----", version, os.Getpid())
+}
+
+// teeWriter writes to the log file and, best effort, to stderr. Windows GUI
+// builds have no usable stderr; io.MultiWriter would stop at that error and
+// never reach the file.
+type teeWriter struct {
+	file   io.Writer
+	stderr io.Writer
+}
+
+func (t teeWriter) Write(p []byte) (int, error) {
+	n, err := t.file.Write(p)
+	_, _ = t.stderr.Write(p)
+	return n, err
 }
 
 // finishApp closes the app server once the core has stopped.

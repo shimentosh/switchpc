@@ -1,3 +1,10 @@
+# VKVM 0.3.2
+
+## Fixes
+
+- Windows release builds now actually write `vkvm.log`. They have no console,
+  and the log stopped at the console write before reaching the file.
+
 # VKVM 0.3.1
 
 ## Fixes
