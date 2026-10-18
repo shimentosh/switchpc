@@ -5,7 +5,9 @@ package osutils
 import (
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -76,9 +78,35 @@ func IsAdmin() bool {
 	return member
 }
 
+// installerRuleCoversThisExe reports whether the installer's program rule
+// exists for the running executable.
+func installerRuleCoversThisExe() bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	cmd := exec.Command("netsh", "advfirewall", "firewall", "show", "rule", "name=VKVM", "verbose")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000} // CREATE_NO_WINDOW
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return false
+	}
+	// Paths written by older installers can contain doubled backslashes.
+	rules := strings.ToLower(strings.ReplaceAll(string(output), `\\`, `\`))
+	return strings.Contains(rules, strings.ToLower(filepath.Clean(exe)))
+}
+
 // EnsureFirewallRule checks if a firewall rule for the VKVM port exists,
 // and if not, attempts to create it using PowerShell with admin elevation.
 func EnsureFirewallRule(port int) error {
+	// The installer (0.3+) allows vkvm.exe itself through the firewall under
+	// the rule "VKVM". If that rule covers this executable, nothing to do and
+	// no UAC prompt is needed.
+	if installerRuleCoversThisExe() {
+		log.Printf("Firewall: installer rule 'VKVM' allows this program. OK.")
+		return nil
+	}
+
 	ruleName := "VKVM Remote Switch"
 
 	log.Printf("Firewall: Checking status for rule '%s' on port %d...", ruleName, port)

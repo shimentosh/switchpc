@@ -10,6 +10,7 @@
 Unicode true
 !include MUI2.nsh
 !include LogicLib.nsh
+!include WordFunc.nsh
 
 !define APP_NAME "VKVM"
 !ifndef APP_VERSION
@@ -54,6 +55,12 @@ Function LaunchUnelevated
   Exec '"$WINDIR\explorer.exe" "$INSTDIR\vkvm.exe"'
 FunctionEnd
 
+; The 0.2.x installer stored the folder as "...\\VKVM" (a literal double
+; backslash). Normalise it so the firewall rule matches the real path.
+Function .onInit
+  ${WordReplace} "$INSTDIR" "\\" "\" "+" $INSTDIR
+FunctionEnd
+
 ; Stop a running VKVM and remove what VKVM 0.2.x installed: the VKVMCore
 ; service, the --companion startup entry and the port-only firewall rule.
 !macro StopVKVM
@@ -69,6 +76,7 @@ FunctionEnd
 Section "VKVM" SEC_MAIN
   SetShellVarContext current
   !insertmacro StopVKVM
+  ${WordReplace} "$INSTDIR" "\\" "\" "+" $INSTDIR
 
   SetOutPath "$INSTDIR"
   File "..\..\dist\vkvm.exe"

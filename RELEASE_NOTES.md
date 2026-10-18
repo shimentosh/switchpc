@@ -1,3 +1,12 @@
+# VKVM 0.3.3
+
+## Fixes
+
+- Windows: no UAC prompt after installing. VKVM now recognises the installer's
+  firewall rule instead of asking to create the old port rule.
+- Windows installer: upgrades from 0.2.x no longer keep the folder path with a
+  doubled backslash, which the firewall rule could not match.
+
 # VKVM 0.3.2
 
 ## Fixes
