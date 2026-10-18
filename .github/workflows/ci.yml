@@ -25,6 +25,14 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test ./...
+      - name: Release gates (same as release.yml)
+        run: |
+          packaging/coverage-gate.sh "$RUNNER_TEMP/vkvm-coverage.out"
+          packaging/verify-package.sh
+          packaging/release.sh --check
+          hardware/accept-hid.sh portable
+          packaging/platform-acceptance.sh portable
+          packaging/network-trace.sh portable
       - name: Build app bundle and DMG
         run: |
           packaging/macos/build-dmg.sh "$RUNNER_TEMP/dmg"
