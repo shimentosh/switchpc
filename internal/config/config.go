@@ -274,7 +274,8 @@ func DefaultConfig() *Config {
 	// The Windows installer provisions a per-user companion alongside the
 	// machine-wide SCM core. A fresh Windows installation must keep that
 	// companion enabled at login; users can turn it off explicitly in the UI.
-	startOnBoot := runtime.GOOS == "windows"
+	// Start at login on both platforms so switching always works after a reboot.
+	startOnBoot := runtime.GOOS == "windows" || runtime.GOOS == "darwin"
 	return &Config{
 		Profiles: []Profile{
 			{

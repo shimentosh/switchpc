@@ -1238,6 +1238,23 @@ func runServiceContextMode(cfgMgr *config.Manager, parent context.Context, inter
 					log.Printf("Agent coordinator stopped: %v", err)
 				}
 			}()
+			// The coordinator otherwise only searches again after a network
+			// change. Keep looking while disconnected so the Agent finds the
+			// Host when it is switched on later or its address changed.
+			go func() {
+				ticker := time.NewTicker(20 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-serviceCtx.Done():
+						return
+					case <-ticker.C:
+						if !sw.IsConnectedToCheck() {
+							agentCoordinator.Rescan()
+						}
+					}
+				}
+			}()
 		}
 
 		if interactive {

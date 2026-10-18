@@ -23,10 +23,15 @@
 - VKVM restarts itself when a change needs it, and logs to `vkvm.log` in the user
   cache folder.
 
+- **Starts at login on Windows and macOS** by default, and the second computer
+  keeps looking for the main one (every 20 s while disconnected), so the two
+  reconnect on their own whichever computer is switched on first.
+
 ## Fixes
 
 - Monitors that report HDMI 1 are no longer rewritten to DisplayPort 1.
-- On macOS, *Quit* no longer gets undone by the login item relaunching VKVM.
+- macOS login item: turning on *Start at login* no longer starts a second copy
+  or restarts VKVM, and *Quit* is no longer undone by launchd.
 
 ## Notes
 

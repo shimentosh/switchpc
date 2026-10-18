@@ -90,17 +90,21 @@ func enablePlatform() error {
 	}
 	plistPath := filepath.Join(launchAgentsDir, "com.vkvm.agent.plist")
 	logPath := filepath.Join(logDir, "agent.log")
+	rendered, err := renderLaunchAgentPlist(execPath, logPath)
+	if err != nil {
+		return err
+	}
+	// VKVM applies this setting on every launch; leave an up-to-date plist
+	// alone.
+	if existing, err := os.ReadFile(plistPath); err == nil && bytes.Equal(existing, rendered) {
+		return nil
+	}
 	tmp, err := os.CreateTemp(launchAgentsDir, ".com.vkvm.agent.*.plist")
 	if err != nil {
 		return err
 	}
 	tmpPath := tmp.Name()
 	defer os.Remove(tmpPath)
-	rendered, err := renderLaunchAgentPlist(execPath, logPath)
-	if err != nil {
-		tmp.Close()
-		return err
-	}
 	if _, err := tmp.Write(rendered); err != nil {
 		tmp.Close()
 		return err
@@ -112,27 +116,11 @@ func enablePlatform() error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpPath, plistPath); err != nil {
-		return err
-	}
-	// A LaunchAgent process applies its own configuration during startup. Do
-	// not boot it out and kickstart it from inside itself: that creates a
-	// restart loop and prevents the interactive hotkey process from settling.
-	if os.Getenv("XPC_SERVICE_NAME") == "com.vkvm.agent" {
-		return nil
-	}
-
-	domain := "gui/" + strconv.Itoa(os.Getuid())
-	// Reload is idempotent for the user's own LaunchAgent. bootout may fail
-	// when this is the first enable, which is expected.
-	_ = exec.Command("launchctl", "bootout", domain, plistPath).Run()
-	if output, err := exec.Command("launchctl", "bootstrap", domain, plistPath).CombinedOutput(); err != nil {
-		return fmt.Errorf("launchctl bootstrap failed: %w: %s", err, output)
-	}
-	if output, err := exec.Command("launchctl", "kickstart", "-k", domain+"/com.vkvm.agent").CombinedOutput(); err != nil {
-		return fmt.Errorf("launchctl kickstart failed: %w: %s", err, output)
-	}
-	return nil
+	// Only install the plist. launchd starts LaunchAgents from
+	// ~/Library/LaunchAgents at the next login by itself. Loading it now
+	// (bootstrap/kickstart) would start a second VKVM next to the running one,
+	// or restart this very process when launchd started it.
+	return os.Rename(tmpPath, plistPath)
 }
 
 func disablePlatform() error {
@@ -141,8 +129,12 @@ func disablePlatform() error {
 		return err
 	}
 	plistPath := filepath.Join(home, "Library", "LaunchAgents", "com.vkvm.agent.plist")
-	domain := "gui/" + strconv.Itoa(os.Getuid())
-	_ = exec.Command("launchctl", "bootout", domain, plistPath).Run()
+	// Unloading the job that is running this process would quit VKVM; just
+	// removing the plist is enough to stop it starting at the next login.
+	if os.Getenv("XPC_SERVICE_NAME") != "com.vkvm.agent" {
+		domain := "gui/" + strconv.Itoa(os.Getuid())
+		_ = exec.Command("launchctl", "bootout", domain, plistPath).Run()
+	}
 	if err := os.Remove(plistPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
