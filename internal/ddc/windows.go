@@ -77,12 +77,19 @@ type windowsController struct {
 // newWindowsController creates a new Windows DDC controller
 func newWindowsController() (*windowsController, error) {
 	// Try project tools directory first (user may have updated version here)
-	paths := []string{
-		`D:\vkvm\tools\ControlMyMonitor.exe`, // Project tools directory (priority)
-		"ControlMyMonitor.exe",               // In PATH
+	var paths []string
+	if exe, err := os.Executable(); err == nil {
+		dir := filepath.Dir(exe)
+		paths = append(paths,
+			filepath.Join(dir, "tools", "ControlMyMonitor.exe"), // tools directory next to vkvm.exe (priority)
+			filepath.Join(dir, "ControlMyMonitor.exe"),
+		)
+	}
+	paths = append(paths,
+		"ControlMyMonitor.exe", // In PATH
 		`C:\Program Files\ControlMyMonitor\ControlMyMonitor.exe`,
 		`C:\Program Files (x86)\ControlMyMonitor\ControlMyMonitor.exe`,
-	}
+	)
 
 	for _, p := range paths {
 		if path, err := exec.LookPath(p); err == nil {

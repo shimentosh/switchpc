@@ -1,3 +1,13 @@
+# VKVM 0.2.2
+
+## Fixes
+
+- Windows release builds now embed ControlMyMonitor.exe, so DDC switching
+  works out of the box instead of failing with "required tool not found".
+- Windows also looks for ControlMyMonitor.exe next to vkvm.exe (and in a
+  `tools` folder beside it) instead of a hardcoded `D:kvm` path.
+- README documents how to open the unsigned macOS build past Gatekeeper.
+
 # VKVM 0.2.1
 
 ## Fixes

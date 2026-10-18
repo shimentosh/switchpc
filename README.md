@@ -41,7 +41,42 @@ Hardware KVM switches that support 2+ monitors and 2+ computers are prohibitivel
 
 ## Installation
 
+### From a Release
+
+Download the latest build from the [Releases page](https://github.com/shimentosh/switchpc/releases).
+
+#### Windows
+- Run `VKVM-Setup.exe`, or run `vkvm.exe` directly.
+- If SmartScreen shows "Windows protected your PC", click **More info** → **Run anyway**.
+
+#### macOS
+The macOS build is not notarized by Apple, so Gatekeeper blocks it on first launch
+("cannot be opened because the developer cannot be verified" or "VKVM is damaged").
+Remove the quarantine flag after downloading:
+
+```bash
+# DMG: drag VKVM.app into Applications first, then
+xattr -dr com.apple.quarantine /Applications/VKVM.app
+open /Applications/VKVM.app
+
+# Standalone binary
+cd ~/Downloads
+xattr -d com.apple.quarantine vkvm-darwin-arm64
+chmod +x vkvm-darwin-arm64
+./vkvm-darwin-arm64
+```
+
+Without Terminal: try to open the app once, then go to `System Settings` →
+`Privacy & Security`, scroll down and click **Open Anyway**.
+
+Then grant **Accessibility** permission (`System Settings` → `Privacy & Security` →
+`Accessibility`, add VKVM and toggle it on) and restart VKVM so global hotkeys work.
+
 ### From Source
+
+> **Windows**: copy `tools\ControlMyMonitor.exe` into `internal\embedded\tools\` before
+> building, otherwise the binary has no DDC backend and fails with "required tool not found".
+> To see logs while testing, build without `-H windowsgui` and run it from a terminal.
 ```bash
 # Clone the repository
 git clone https://github.com/aluo96078/vkvm.git

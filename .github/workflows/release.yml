@@ -107,6 +107,9 @@ jobs:
         run: |
           choco install nsis -y --no-progress
           New-Item -ItemType Directory -Force dist | Out-Null
+          # ControlMyMonitor.exe is gitignored inside the embed directory, so
+          # copy it in before building or the release has no DDC backend.
+          Copy-Item tools\ControlMyMonitor.exe internal\embedded\tools\ControlMyMonitor.exe -Force
           go build -trimpath -ldflags "-H windowsgui" -o dist\vkvm.exe ./cmd
           powershell -ExecutionPolicy Bypass -File packaging\windows\test-installer.ps1
           & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" packaging\windows\vkvm.nsi
